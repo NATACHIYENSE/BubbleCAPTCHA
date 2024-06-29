@@ -83,29 +83,31 @@ relayRemote.OnServerEvent:Connect(onReply)
 --callback is a function called when the Challenge is concluded.
 --duration is the maximum time allowed to the player to answer.
 --minTime isn't that useful but exists to further help combat with botting I guess
-local function challenge(p: Player, callback: T.Callback, duration: number?, minTime: number?)
+local function challenge(p: Player, callback: T.Callback, random: Random, duration: number?, minTime: number?)
 	idCounter += 1
 	local id: number = idCounter
-	local char: T.Char = tostring(math.random(0, 9))::T.Char
-	local image: T.Image = Image.Draw(char)
+	local char: T.Char = tostring(random:NextInteger(0, 9))::T.Char
+	local image: T.Image = Image.Draw(char, Random.new(random:NextInteger(10_000, 100_000)))
 	
 	--it's very important that the sort order is unpredictable.
 	--otherwise anyone reverse-engineering this can find the answer without guessing.
-	local sortRandom: Random = Random.new(os.time()-1718325302) --this number is arbitrary; YOU SHOULD CHANGE IT!!!
 	
 	local options: {T.Char} = {} do --randomize the choices the player can choose. This part is a mess.
 		local i: number = 0
 		local comp: {T.Char} = CharMap.Complements[char]
 		for choose in CharMap.CharMap do
-			if not (comp and table.find(comp, choose)) then
+			if choose ~= char and not (comp and table.find(comp, choose)) then
 				i += 1
-				table.insert(options, sortRandom:NextInteger(1, i), choose)
+				table.insert(options, choose)
 			end
 			if i >= 5 then
 				break
 			end
 		end
-		table.insert(options, sortRandom:NextInteger(1, i), char)
+		table.insert(options, char)
+		
+		--shuffle the choices; very important!!
+		random:Shuffle(options)
 	end
 
 	local new: T.Challenge = { --for server record
