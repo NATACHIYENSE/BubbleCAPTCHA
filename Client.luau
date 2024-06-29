@@ -16,9 +16,17 @@ local promptUI = script:WaitForChild('BubbleCAPTCHAPrompt')
 local promptChoiceButton = script:WaitForChild('Choice')
 
 local pgui = game:GetService('Players').LocalPlayer.PlayerGui
-local captchaContainer = script:WaitForChild('BubbleCAPTCHA'):WaitForChild('Container')
 local tws = game:GetService('TweenService')
+local cont = game:GetService('ContentProvider')
+local captchaContainer = script:WaitForChild('BubbleCAPTCHA')
 local twiGeneric = TweenInfo.new(.25, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut)
+
+local sounds: {Sound} = {
+	script:WaitForChild('PopupSound'),
+	script:WaitForChild('PassSound'),
+	script:WaitForChild('FailSound'),
+}
+cont:PreloadAsync(sounds)
 
 type PromptUI = typeof(promptUI)
 
@@ -62,9 +70,11 @@ local function new(relay: T.Relay)
 	local choicesF = f:WaitForChild('Choices')
 	local choicesUIGL = choicesF:WaitForChild('UIGridLayout')
 	ui:SetAttribute('ChallengeId', relay.ChallengeId)
+	ui.ZIndex = relay.ChallengeId
 
 	local cam: Camera = Instance.new('Camera')
-	cam.CFrame = CFrame.lookAt(Vector3.yAxis*20, Vector3.zero, -Vector3.zAxis) --look straight down
+	cam.CFrame = CFrame.lookAt(Vector3.yAxis*40, Vector3.zero, -Vector3.zAxis) --look straight down
+	cam.FieldOfView = 40
 	vf.CurrentCamera = cam
 	
 	local prompt: Prompt
@@ -75,7 +85,9 @@ local function new(relay: T.Relay)
 			prompt.Life -= dt
 			timerTL.Text = prompt.Message or string.format('Time left: <b>%.01f</b>', prompt.Life)
 			if prompt.Life <= 1 then --fade out the Prompt when its life is almost up
-				ui.GroupTransparency = (1 - prompt.Life)^3
+				local invCubed: number = (1 - prompt.Life)^3
+				ui.GroupTransparency = invCubed
+				--f.Size = UDim2.fromOffset((1-invCubed)*300//1, 1)
 			end
 		end
 		delete(relay.ChallengeId, true) --expires when the time is up
@@ -87,13 +99,15 @@ local function new(relay: T.Relay)
 		local choice: TextButton = promptChoiceButton:Clone()
 		choice.Text = v
 		choice.MouseButton1Click:Connect(function()
-			local reply: T.Reply = {
-				ChallengeId = relay.ChallengeId,
-				Answer = v,
-			}
-			prompt.Life = 2 --extend the life of the prompt to allow the server time to process
-			prompt.Message = 'Answering...'
-			relayRemote:FireServer(reply)
+			if not prompt.Message then --prevent repeat inputs
+				local reply: T.Reply = {
+					ChallengeId = relay.ChallengeId,
+					Answer = v,
+				}
+				prompt.Life = 2 --extend the life of the prompt to allow the server time to process
+				prompt.Message = 'Answering...'
+				relayRemote:FireServer(reply)
+			end
 		end)
 		choice.LayoutOrder = i
 		choice.Visible = false
@@ -149,16 +163,24 @@ end
 relayRemote.OnClientEvent:Connect(function(relay: T.Relay) 
 	if type(relay.Pass) == 'boolean' then --if it's a result
 		local exists: Prompt? = registry[relay.ChallengeId]
-		if exists then
-			exists.Life = 1
-			exists.Message = if relay.Pass then
-				'<font color="#0F0"><b>Pass</b></font>'
-				else '<font color="#F00"><b>Fail</b></font>'
-			exists.UI.GroupColor3 = if relay.Pass then Color3.new(0,1,0) else Color3.new(1,0,0)
-			tws:Create(exists.UI.Frame.Choices.UIGridLayout, twiGeneric, {CellSize=UDim2.fromOffset(40,0)}):Play()
+		if exists then			
+			if relay.Pass then
+				exists.Life = 1
+				exists.Message = '<font color="#0F0"><b>Pass</b></font>'
+				exists.UI.GroupColor3 = Color3.new(0, 1, 0)
+				sounds[2]:Play()
+				tws:Create(exists.UI.Frame.Choices.UIGridLayout, twiGeneric, {CellSize=UDim2.fromOffset(0,0)}):Play()
+			else
+				exists.Life = 0.25
+				exists.Message = '<font color="#F00"><b>Fail</b></font>'
+				exists.UI.GroupColor3 = Color3.new(1, 0, 0)
+				sounds[3]:Play()	
+				exists.UI.Frame.Choices.UIGridLayout.CellSize = UDim2.fromOffset(0, 0)
+			end
 		end
 	else --if it's a new Challenge that needs to be solved
 		new(relay)
+		sounds[1]:Play()
 	end
 end)
 
